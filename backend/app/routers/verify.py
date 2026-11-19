@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 from decimal import Decimal
 
@@ -5,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import enforce_verify_rate_limit
 from app.db.session import get_db
 from app.models.academic import Course, Department, Semester, Subject
 from app.models.result import Mark, PublishedResult
@@ -13,10 +16,15 @@ from app.schemas.academic import PublicVerificationResponse, StudentSubjectResul
 from app.services.blockchain_service import BlockchainService, compute_result_hash
 from app.services.result_service import build_canonical_result_payload, get_blockchain_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/verify", tags=["Public Verification (No Auth)"])
 
 
-@router.get("/{result_id}", response_model=PublicVerificationResponse)
+@router.get(
+    "/{result_id}",
+    response_model=PublicVerificationResponse,
+    dependencies=[Depends(enforce_verify_rate_limit)],
+)
 async def verify_published_result(
     result_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -71,8 +79,17 @@ async def verify_published_result(
     )
     recomputed_hash = compute_result_hash(canonical_payload)
 
-    # Direct smart contract verification against ResultRegistry.sol
-    on_chain = blockchain.verify_result_hash(str(published.id), recomputed_hash)
+    # Non-blocking smart contract verification against ResultRegistry.sol (P1-10 fix)
+    try:
+        on_chain = await asyncio.to_thread(
+            blockchain.verify_result_hash, str(published.id), recomputed_hash
+        )
+    except Exception:
+        logger.exception("Blockchain RPC error during public verification for %s", result_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Blockchain verification service is temporarily unavailable. Please retry shortly.",
+        )
 
     subject_rows = [
         StudentSubjectResult(

@@ -34,4 +34,6 @@ async def results_websocket(
             if message.strip().lower() == "ping":
                 await websocket.send_json({"event": "PONG"})
     except WebSocketDisconnect:
+        pass
+    finally:
         ws_manager.disconnect(websocket, user_id=user_id, role=role)

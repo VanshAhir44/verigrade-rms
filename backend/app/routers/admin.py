@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import io
+import logging
 import uuid
 from decimal import Decimal
 from typing import Optional
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import require_roles
-from app.core.security import hash_password
+from app.core.security import hash_password_async, validate_password_byte_length
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.models.academic import Course, Department, Enrollment, Semester, Subject
@@ -39,8 +40,12 @@ from app.services.grading_service import calculate_cgpa, summarize_semester
 from app.services.result_service import build_canonical_result_payload, get_blockchain_service
 from app.services.ws_manager import ws_manager
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin (Controller of Examinations)"])
 admin_guard = require_roles(UserRole.ADMIN)
+
+MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB
+MAX_CSV_ROWS = 1000
 
 
 # --- Departments ---
@@ -190,6 +195,8 @@ async def create_subject(
         fac = (await db.execute(select(User).where(User.id == payload.faculty_id, User.role == UserRole.FACULTY))).scalar_one_or_none()
         if fac is None:
             raise HTTPException(status_code=404, detail="Assigned faculty user not found")
+    if (payload.max_internal + payload.max_external) <= Decimal("0"):
+        raise HTTPException(status_code=422, detail="max_internal + max_external must be greater than zero")
     if payload.passing_marks > (payload.max_internal + payload.max_external):
         raise HTTPException(status_code=422, detail="passing_marks cannot exceed max_internal + max_external")
 
@@ -236,7 +243,7 @@ async def list_subjects(
     return [SubjectResponse.model_validate(s) for s in rows]
 
 
-# --- Enrollments ---
+# --- Enrollments (P1-5 fix: validate course, semester, and course-semester match) ---
 @router.post("/enrollments", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_enrollment(
     payload: EnrollmentCreate,
@@ -246,6 +253,21 @@ async def create_enrollment(
     student = (await db.execute(select(User).where(User.id == payload.student_id, User.role == UserRole.STUDENT))).scalar_one_or_none()
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
+
+    course = (await db.execute(select(Course).where(Course.id == payload.course_id))).scalar_one_or_none()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    semester = (await db.execute(select(Semester).where(Semester.id == payload.semester_id))).scalar_one_or_none()
+    if semester is None:
+        raise HTTPException(status_code=404, detail="Semester not found")
+
+    if semester.course_id != course.id:
+        raise HTTPException(
+            status_code=422,
+            detail="Specified semester does not belong to the specified course",
+        )
+
     existing = (
         await db.execute(
             select(Enrollment).where(
@@ -277,7 +299,7 @@ async def create_enrollment(
     return EnrollmentResponse.model_validate(enrollment)
 
 
-# --- Bulk CSV User Import ---
+# --- Bulk CSV User Import (P2-1, P2-2, P2-8 fixes: size/row cap, 72-byte pw check, async bcrypt) ---
 @router.post("/users/bulk-csv", response_model=BulkCsvImportResponse)
 async def bulk_import_users_csv(
     file: UploadFile = File(...),
@@ -285,7 +307,9 @@ async def bulk_import_users_csv(
     db: AsyncSession = Depends(get_db),
 ) -> BulkCsvImportResponse:
     """Imports Faculty/Student accounts from a CSV with columns: email,full_name,role,password,enrollment_no."""
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_CSV_BYTES + 1)
+    if len(raw_bytes) > MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV file exceeds 2 MB limit")
     try:
         text_content = raw_bytes.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -303,13 +327,17 @@ async def bulk_import_users_csv(
     errors: list[BulkCsvError] = []
 
     for row_num, row in enumerate(reader, start=2):
+        if row_num - 1 > MAX_CSV_ROWS:
+            errors.append(BulkCsvError(row=row_num, error=f"Row limit ({MAX_CSV_ROWS}) exceeded"))
+            break
+
         email = (row.get("email") or "").strip().lower()
         full_name = (row.get("full_name") or "").strip()
         role_str = (row.get("role") or "").strip().lower()
         password = (row.get("password") or "").strip()
         enrollment_no = (row.get("enrollment_no") or "").strip() or None
 
-        if not email or "@" not in email:
+        if not email or "@" not in email or "." not in email.split("@")[-1]:
             errors.append(BulkCsvError(row=row_num, email=email or None, error="Invalid email"))
             continue
         if len(full_name) < 2:
@@ -317,6 +345,11 @@ async def bulk_import_users_csv(
             continue
         if len(password) < 8:
             errors.append(BulkCsvError(row=row_num, email=email, error="password must be at least 8 characters"))
+            continue
+        try:
+            validate_password_byte_length(password)
+        except ValueError as exc:
+            errors.append(BulkCsvError(row=row_num, email=email, error=str(exc)))
             continue
         try:
             role = UserRole(role_str)
@@ -337,9 +370,10 @@ async def bulk_import_users_csv(
                 errors.append(BulkCsvError(row=row_num, email=email, error="Duplicate enrollment_no"))
                 continue
 
+        pw_hash = await hash_password_async(password)
         new_user = User(
             email=email,
-            password_hash=hash_password(password),
+            password_hash=pw_hash,
             full_name=full_name,
             role=role,
             enrollment_no=enrollment_no,
@@ -362,7 +396,7 @@ async def bulk_import_users_csv(
     return BulkCsvImportResponse(created_count=created_count, errors=errors)
 
 
-# --- Immutable Audit Logs ---
+# --- Audit Logs ---
 @router.get("/audit-logs", response_model=list[AuditLogResponse])
 async def list_audit_logs(
     entity_type: Optional[str] = Query(default=None),
@@ -380,7 +414,7 @@ async def list_audit_logs(
     return [AuditLogResponse.model_validate(a) for a in rows]
 
 
-# --- One-Click Live Publish (DB Lock + Blockchain Hash + WebSocket Broadcast) ---
+# --- One-Click Live Publish (P1-2 & P1-3 fixes: pre-validation pass, ordered CGPA, immediate WS push) ---
 @router.post("/semesters/{semester_id}/publish", response_model=SemesterPublishResponse)
 async def publish_semester_results(
     semester_id: uuid.UUID,
@@ -405,8 +439,9 @@ async def publish_semester_results(
     if not enrollments:
         raise HTTPException(status_code=400, detail="No students enrolled in this semester")
 
+    # PHASE 1: Pre-validate ALL students BEFORE any irreversible on-chain transaction (P1-3 fix)
     published_records: list[PublishedResult] = []
-    ws_notifications: list[tuple[str, dict]] = []
+    pending_to_publish: list[tuple[User, list[Mark]]] = []
 
     for enrollment in enrollments:
         student = (await db.execute(select(User).where(User.id == enrollment.student_id))).scalar_one()
@@ -446,7 +481,13 @@ async def publish_semester_results(
                 detail=f"All marks for student {student.enrollment_no or student.email} must be submitted (under_review) before publishing",
             )
 
-        marks_with_subjects = [(m, subjects_by_id[m.subject_id]) for m in marks]
+        pending_to_publish.append((student, list(marks)))
+
+    # PHASE 2: Anchor each validated student on-chain, commit, and push live WS immediately
+    current_order_key = (semester.academic_year, semester.number)
+
+    for student, marks in pending_to_publish:
+        marks_with_subjects = [(m, subjects_by_id[m.subject_id]) for m in marks if m.subject_id in subjects_by_id]
         sem_summary = summarize_semester(
             [
                 (
@@ -458,24 +499,36 @@ async def publish_semester_results(
             ]
         )
 
-        # Compute cumulative CGPA across prior published semesters + current semester
-        prior_published = (
+        # P1-2 fix: include ONLY chronologically earlier published semesters and their graded credits
+        prior_rows = (
             await db.execute(
-                select(PublishedResult).where(
+                select(PublishedResult, Semester)
+                .join(Semester, PublishedResult.semester_id == Semester.id)
+                .where(
                     PublishedResult.student_id == student.id,
                     PublishedResult.semester_id != semester_id,
                 )
             )
-        ).scalars().all()
+        ).all()
 
         sem_credit_sgpa_pairs: list[tuple[Decimal, Decimal]] = []
-        for prev in prior_published:
-            prev_subs = (
-                await db.execute(select(Subject).where(Subject.semester_id == prev.semester_id))
+        for prev_res, prev_sem in prior_rows:
+            if (prev_sem.academic_year, prev_sem.number) >= current_order_key:
+                continue
+            prev_marks_subs = (
+                await db.execute(
+                    select(Subject.credits)
+                    .join(Mark, Mark.subject_id == Subject.id)
+                    .where(
+                        Mark.student_id == student.id,
+                        Mark.semester_id == prev_sem.id,
+                    )
+                )
             ).scalars().all()
-            prev_credits = sum((Decimal(str(s.credits)) for s in prev_subs), Decimal("0"))
+            prev_credits = sum((Decimal(str(c)) for c in prev_marks_subs), Decimal("0"))
             if prev_credits > Decimal("0"):
-                sem_credit_sgpa_pairs.append((prev_credits, Decimal(str(prev.sgpa))))
+                sem_credit_sgpa_pairs.append((prev_credits, Decimal(str(prev_res.sgpa))))
+
         sem_credit_sgpa_pairs.append((sem_summary.total_credits, sem_summary.sgpa))
         cgpa = calculate_cgpa(sem_credit_sgpa_pairs)
 
@@ -490,18 +543,21 @@ async def publish_semester_results(
         )
         result_hash = compute_result_hash(canonical_payload)
 
-        # Anchor immutable SHA-256 hash on-chain without blocking FastAPI's event loop
         try:
             receipt = await asyncio.to_thread(
                 blockchain.store_result_hash, str(result_uuid), result_hash
             )
-        except Exception as exc:
+        except Exception:
+            logger.exception(
+                "On-chain publish failed for student %s in semester %s",
+                student.id,
+                semester_id,
+            )
             raise HTTPException(
                 status_code=502,
-                detail=f"Blockchain transaction failed for {student.enrollment_no or student.email}: {exc}",
+                detail=f"Blockchain transaction failed for {student.enrollment_no or student.email}. Check RPC connectivity and wallet balance.",
             )
 
-        # Lock all marks as published
         now = utcnow()
         for m in marks:
             m.status = MarkStatus.PUBLISHED
@@ -540,29 +596,25 @@ async def publish_semester_results(
         await db.commit()
         await db.refresh(published)
         published_records.append(published)
-        ws_notifications.append(
-            (
-                str(student.id),
-                {
-                    "event": "RESULT_PUBLISHED",
-                    "result_id": str(result_uuid),
-                    "semester_id": str(semester_id),
-                    "semester_number": semester.number,
-                    "academic_year": semester.academic_year,
-                    "sgpa": str(sem_summary.sgpa),
-                    "cgpa": str(cgpa),
-                    "overall_status": sem_summary.overall_status,
-                    "result_hash_sha256": result_hash,
-                    "blockchain_tx_hash": receipt.tx_hash,
-                    "block_number": receipt.block_number,
-                    "published_at": now.isoformat(),
-                },
-            )
-        )
 
-    # Real-time WebSocket push to connected students (zero page reload)
-    for student_id_str, payload_event in ws_notifications:
-        await ws_manager.send_to_user(student_id_str, payload_event)
+        # Immediately notify this student via WebSocket so later failures never drop their alert
+        await ws_manager.send_to_user(
+            str(student.id),
+            {
+                "event": "RESULT_PUBLISHED",
+                "result_id": str(result_uuid),
+                "semester_id": str(semester_id),
+                "semester_number": semester.number,
+                "academic_year": semester.academic_year,
+                "sgpa": str(sem_summary.sgpa),
+                "cgpa": str(cgpa),
+                "overall_status": sem_summary.overall_status,
+                "result_hash_sha256": result_hash,
+                "blockchain_tx_hash": receipt.tx_hash,
+                "block_number": receipt.block_number,
+                "published_at": now.isoformat(),
+            },
+        )
 
     return SemesterPublishResponse(
         semester_id=semester_id,

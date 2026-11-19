@@ -8,18 +8,19 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import settings
+from app.core.config import normalize_async_database_url, settings
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
 
 def create_engine_from_url(database_url: str) -> AsyncEngine:
+    normalized = normalize_async_database_url(database_url)
     connect_args = {}
-    if database_url.startswith("sqlite"):
+    if normalized.startswith("sqlite"):
         connect_args["check_same_thread"] = False
     return create_async_engine(
-        database_url,
+        normalized,
         echo=False,
         pool_pre_ping=True,
         connect_args=connect_args,
@@ -29,9 +30,9 @@ def create_engine_from_url(database_url: str) -> AsyncEngine:
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        if not settings.DATABASE_URL:
+        if not settings.async_database_url:
             raise RuntimeError("DATABASE_URL environment variable is not configured.")
-        _engine = create_engine_from_url(settings.DATABASE_URL)
+        _engine = create_engine_from_url(settings.async_database_url)
     return _engine
 
 

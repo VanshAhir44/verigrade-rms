@@ -39,12 +39,17 @@ export default function StudentDashboardPage() {
     setTimeout(() => setToast(null), 6000);
   }, []);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadDashboard = useCallback(async () => {
+    setLoadError(null);
     try {
       const data = await apiRequest<StudentDashboardResponse>("/student/results");
       setDashboard(data);
     } catch (err) {
-      showToast("error", err instanceof ApiError ? err.message : "Failed to load results");
+      const msg = err instanceof ApiError ? err.message : "Failed to load results";
+      setLoadError(msg);
+      showToast("error", msg);
     }
   }, [showToast]);
 
@@ -63,7 +68,10 @@ export default function StudentDashboardPage() {
     [loadDashboard, showToast]
   );
 
-  const { status: wsStatus } = useResultWebSocket(accessToken, handleWsEvent);
+  const { status: wsStatus } = useResultWebSocket(
+    user?.role === "student" ? accessToken : null,
+    handleWsEvent
+  );
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "student")) {
@@ -88,7 +96,31 @@ export default function StudentDashboardPage() {
     }
   };
 
-  if (loading || !user || !dashboard) return null;
+  if (loading || !user || user.role !== "student") return null;
+
+  if (!dashboard) {
+    return (
+      <div className="min-h-screen">
+        <Navbar wsStatus={wsStatus} />
+        <ToastBanner toast={toast} onClose={() => setToast(null)} />
+        <main className="mx-auto max-w-2xl px-4 py-16 text-center">
+          <div className="glass-card space-y-4 p-8">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {loadError ? `Could not load results: ${loadError}` : "Loading your academic dashboard..."}
+            </p>
+            {loadError && (
+              <button
+                onClick={loadDashboard}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const publishedSemesters = dashboard.semesters.filter((s) => s.result_status === "published");
   const latestSem = publishedSemesters[publishedSemesters.length - 1];

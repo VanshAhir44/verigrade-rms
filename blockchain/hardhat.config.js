@@ -1,6 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config({ path: "../.env" });
 
+const LOCAL_RPC_URL = process.env.LOCAL_RPC_URL || "http://localhost:8545";
 const SEPOLIA_RPC_URL = process.env.BLOCKCHAIN_RPC_URL || "";
 const DEPLOYER_KEY = process.env.BLOCKCHAIN_DEPLOYER_KEY || "";
 
@@ -20,8 +21,8 @@ module.exports = {
       chainId: 31337,
     },
     localhost: {
-      url: process.env.BLOCKCHAIN_RPC_URL || "http://localhost:8545",
-      chainId: Number(process.env.BLOCKCHAIN_CHAIN_ID || 31337),
+      url: LOCAL_RPC_URL,
+      chainId: 31337,
     },
     ...(SEPOLIA_RPC_URL && DEPLOYER_KEY
       ? {

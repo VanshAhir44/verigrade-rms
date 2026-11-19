@@ -93,11 +93,24 @@ def evaluate_subject_mark(
 
     matched_grade = "F"
     matched_point = Decimal("0.00")
-    for rule in sorted(rules, key=lambda r: r.min_percentage, reverse=True):
+    sorted_rules = sorted(rules, key=lambda r: r.min_percentage, reverse=True)
+    for rule in sorted_rules:
         if percentage >= rule.min_percentage:
             matched_grade = rule.letter
             matched_point = rule.grade_point.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
             break
+
+    # P1-1 fix: if student met subject's configured passing_marks even below 40% of max_total,
+    # assign the lowest passing grade instead of contradicting passing_marks with "F".
+    if matched_grade == "F":
+        passing_rules = [r for r in sorted_rules if r.letter != "F"]
+        if passing_rules:
+            lowest_pass = passing_rules[-1]
+            matched_grade = lowest_pass.letter
+            matched_point = lowest_pass.grade_point.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+        else:
+            matched_grade = "P"
+            matched_point = Decimal("4.00")
 
     return SubjectEvaluation(
         internal_marks=internal,
@@ -107,7 +120,7 @@ def evaluate_subject_mark(
         percentage=percentage,
         grade=matched_grade,
         grade_point=matched_point,
-        passed=matched_grade != "F",
+        passed=True,
     )
 
 

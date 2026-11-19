@@ -1,4 +1,5 @@
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any, Sequence
 
 from app.models.academic import Semester, Subject
@@ -50,6 +51,11 @@ def build_canonical_result_payload(
     }
 
 
-def get_blockchain_service() -> BlockchainService:
-    """FastAPI dependency returning a configured BlockchainService instance."""
+@lru_cache(maxsize=1)
+def _cached_blockchain_service() -> BlockchainService:
     return BlockchainService()
+
+
+def get_blockchain_service() -> BlockchainService:
+    """FastAPI dependency returning a cached BlockchainService instance."""
+    return _cached_blockchain_service()

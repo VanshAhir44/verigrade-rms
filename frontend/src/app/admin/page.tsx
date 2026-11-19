@@ -101,7 +101,10 @@ export default function AdminDashboardPage() {
     [showToast, loadAll]
   );
 
-  const { status: wsStatus } = useResultWebSocket(accessToken, handleWsEvent);
+  const { status: wsStatus } = useResultWebSocket(
+    user?.role === "admin" ? accessToken : null,
+    handleWsEvent
+  );
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) {
@@ -112,6 +115,13 @@ export default function AdminDashboardPage() {
   }, [loading, user, router, loadAll]);
 
   const handlePublishSemester = async (semesterId: string) => {
+    if (
+      !window.confirm(
+        "Publish this semester's results on-chain? This action permanently anchors SHA-256 hashes on the blockchain and cannot be undone."
+      )
+    ) {
+      return;
+    }
     setPublishingId(semesterId);
     try {
       const res = await apiRequest<SemesterPublishResponse>(
@@ -186,7 +196,7 @@ export default function AdminDashboardPage() {
   const filteredUsers =
     roleFilter === "all" ? users : users.filter((u) => u.role === roleFilter);
 
-  if (loading || !user) return null;
+  if (loading || !user || user.role !== "admin") return null;
 
   return (
     <div className="min-h-screen">

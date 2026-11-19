@@ -2,14 +2,21 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.security import validate_password_byte_length
 from app.models.user import UserRole
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def _check_pw_bytes(cls, v: str) -> str:
+        validate_password_byte_length(v)
+        return v
 
 
 class RefreshRequest(BaseModel):
@@ -46,3 +53,9 @@ class CreateUserRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
     role: UserRole
     enrollment_no: Optional[str] = Field(default=None, max_length=64)
+
+    @field_validator("password")
+    @classmethod
+    def _check_pw_bytes(cls, v: str) -> str:
+        validate_password_byte_length(v)
+        return v

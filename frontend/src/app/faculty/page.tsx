@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Save, Send, Lock, AlertCircle } from "lucide-react";
@@ -16,44 +16,55 @@ interface DraftScore {
   external: string;
 }
 
+function buildDraftMap(roster: FacultySubjectRoster): Record<string, DraftScore> {
+  const map: Record<string, DraftScore> = {};
+  roster.students.forEach((st) => {
+    map[st.student_id] = {
+      internal: st.internal_marks ?? "",
+      external: st.external_marks ?? "",
+    };
+  });
+  return map;
+}
+
 export default function FacultyDashboardPage() {
   const router = useRouter();
   const { user, accessToken, loading } = useAuth();
   const [rosters, setRosters] = useState<FacultySubjectRoster[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const selectedIdRef = useRef<string>("");
   const [drafts, setDrafts] = useState<Record<string, DraftScore>>({});
+  const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error" | "live"; message: string } | null>(null);
 
-  const { status: wsStatus } = useResultWebSocket(accessToken);
+  const { status: wsStatus } = useResultWebSocket(
+    user?.role === "faculty" ? accessToken : null
+  );
 
   const showToast = useCallback((type: "success" | "error" | "live", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 5000);
   }, []);
 
+  // P2-16 fix: loadRosters no longer depends on selectedId (eliminates double fetch on mount)
   const loadRosters = useCallback(async () => {
     try {
       const data = await apiRequest<FacultySubjectRoster[]>("/faculty/subjects");
       setRosters(data);
       if (data.length > 0) {
-        const activeId = selectedId || data[0].subject.id;
+        const activeId = selectedIdRef.current || data[0].subject.id;
+        selectedIdRef.current = activeId;
         setSelectedId(activeId);
         const active = data.find((r) => r.subject.id === activeId) ?? data[0];
-        const nextDrafts: Record<string, DraftScore> = {};
-        active.students.forEach((st) => {
-          nextDrafts[st.student_id] = {
-            internal: st.internal_marks ?? "",
-            external: st.external_marks ?? "",
-          };
-        });
-        setDrafts(nextDrafts);
+        setDrafts(buildDraftMap(active));
+        setIsDirty(false);
       }
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to load subjects");
     }
-  }, [selectedId, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "faculty")) {
@@ -71,17 +82,16 @@ export default function FacultyDashboardPage() {
     : false;
 
   const selectSubject = (id: string) => {
+    if (id === selectedId) return;
+    if (isDirty && !window.confirm("You have unsaved marks for this subject. Discard unsaved changes?")) {
+      return;
+    }
+    selectedIdRef.current = id;
     setSelectedId(id);
     const found = rosters.find((r) => r.subject.id === id);
     if (found) {
-      const next: Record<string, DraftScore> = {};
-      found.students.forEach((st) => {
-        next[st.student_id] = {
-          internal: st.internal_marks ?? "",
-          external: st.external_marks ?? "",
-        };
-      });
-      setDrafts(next);
+      setDrafts(buildDraftMap(found));
+      setIsDirty(false);
     }
   };
 
@@ -95,8 +105,8 @@ export default function FacultyDashboardPage() {
       })
     : false;
 
-  const handleSaveMarks = async () => {
-    if (!activeRoster || hasValidationError) return;
+  const persistCurrentDrafts = async (): Promise<boolean> => {
+    if (!activeRoster || hasValidationError) return false;
     const entries = activeRoster.students
       .filter((st) => {
         const d = drafts[st.student_id];
@@ -110,17 +120,25 @@ export default function FacultyDashboardPage() {
 
     if (entries.length === 0) {
       showToast("error", "Enter marks for at least one student before saving");
-      return;
+      return false;
     }
 
+    await apiRequest(`/faculty/subjects/${activeRoster.subject.id}/marks`, {
+      method: "PUT",
+      body: JSON.stringify({ entries }),
+    });
+    setIsDirty(false);
+    return true;
+  };
+
+  const handleSaveMarks = async () => {
     setSaving(true);
     try {
-      await apiRequest(`/faculty/subjects/${activeRoster.subject.id}/marks`, {
-        method: "PUT",
-        body: JSON.stringify({ entries }),
-      });
-      showToast("success", `Saved ${entries.length} draft mark entries`);
-      await loadRosters();
+      const ok = await persistCurrentDrafts();
+      if (ok) {
+        showToast("success", "Saved draft mark entries");
+        await loadRosters();
+      }
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to save marks");
     } finally {
@@ -128,14 +146,19 @@ export default function FacultyDashboardPage() {
     }
   };
 
+  // P1-9 fix: auto-save unsaved edits BEFORE locking so faculty never locks stale values
   const handleSubmitMarks = async () => {
-    if (!activeRoster) return;
+    if (!activeRoster || hasValidationError) return;
     setSubmitting(true);
     try {
+      if (isDirty) {
+        const saved = await persistCurrentDrafts();
+        if (!saved) return;
+      }
       await apiRequest(`/faculty/subjects/${activeRoster.subject.id}/submit`, {
         method: "POST",
       });
-      showToast("success", "Marks submitted and locked for Controller of Examinations review");
+      showToast("success", "Marks saved, submitted, and locked for Controller of Examinations review");
       await loadRosters();
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Submission failed");
@@ -144,7 +167,7 @@ export default function FacultyDashboardPage() {
     }
   };
 
-  if (loading || !user) return null;
+  if (loading || !user || user.role !== "faculty") return null;
 
   return (
     <div className="min-h-screen">
@@ -187,6 +210,9 @@ export default function FacultyDashboardPage() {
                   <p className="text-xs text-slate-500">
                     Semester {activeRoster.semester_number} ({activeRoster.academic_year}) &bull; Max
                     Internal: {maxInt} &bull; Max External: {maxExt}
+                    {isDirty && !isLocked && (
+                      <span className="ml-2 font-semibold text-amber-600">• Unsaved changes</span>
+                    )}
                   </p>
                 </div>
 
@@ -199,7 +225,7 @@ export default function FacultyDashboardPage() {
                   <div className="flex gap-2">
                     <motion.button
                       whileTap={{ scale: 0.97 }}
-                      disabled={saving || hasValidationError}
+                      disabled={saving || submitting || hasValidationError}
                       onClick={handleSaveMarks}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
                     >
@@ -208,7 +234,7 @@ export default function FacultyDashboardPage() {
                     </motion.button>
                     <motion.button
                       whileTap={{ scale: 0.97 }}
-                      disabled={submitting || hasValidationError}
+                      disabled={submitting || saving || hasValidationError}
                       onClick={handleSubmitMarks}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                     >
@@ -254,12 +280,13 @@ export default function FacultyDashboardPage() {
                               step="0.5"
                               disabled={isLocked}
                               value={d.internal}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                setIsDirty(true);
                                 setDrafts((prev) => ({
                                   ...prev,
                                   [st.student_id]: { ...d, internal: e.target.value },
-                                }))
-                              }
+                                }));
+                              }}
                               className={`w-24 rounded-lg border px-2.5 py-1.5 text-sm outline-none dark:bg-slate-900 ${
                                 intBad
                                   ? "border-rose-500 bg-rose-50 text-rose-700"
@@ -278,12 +305,13 @@ export default function FacultyDashboardPage() {
                               step="0.5"
                               disabled={isLocked}
                               value={d.external}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                setIsDirty(true);
                                 setDrafts((prev) => ({
                                   ...prev,
                                   [st.student_id]: { ...d, external: e.target.value },
-                                }))
-                              }
+                                }));
+                              }}
                               className={`w-24 rounded-lg border px-2.5 py-1.5 text-sm outline-none dark:bg-slate-900 ${
                                 extBad
                                   ? "border-rose-500 bg-rose-50 text-rose-700"

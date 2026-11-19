@@ -4,16 +4,17 @@ from typing import Optional
 
 import jwt
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    hash_password,
+    dummy_verify_password_async,
+    hash_password_async,
     hash_token,
-    verify_password,
+    verify_password_async,
 )
 from app.models.audit import AuditLog
 from app.models.user import RefreshToken, User, UserRole
@@ -25,7 +26,16 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
     result = await db.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(password, user.password_hash):
+    if user is None:
+        # Equalize response timing to mitigate email enumeration
+        await dummy_verify_password_async(password)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    valid = await verify_password_async(password, user.password_hash)
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -58,6 +68,15 @@ async def issue_token_pair(db: AsyncSession, user: User) -> TokenResponse:
     )
 
 
+async def revoke_all_user_refresh_tokens(db: AsyncSession, user_id: uuid.UUID, now: datetime) -> None:
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    await db.commit()
+
+
 async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str) -> TokenResponse:
     try:
         payload = decode_token(raw_refresh_token, expected_type="refresh")
@@ -78,10 +97,18 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str) -> Toke
     stored_token = result.scalar_one_or_none()
     now = datetime.now(timezone.utc)
 
-    if stored_token is None or stored_token.revoked_at is not None:
+    if stored_token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been revoked or is unknown",
+            detail="Refresh token is unknown",
+        )
+
+    if stored_token.revoked_at is not None:
+        # Reuse detection: replay of an already-rotated token revokes all active sessions for this user
+        await revoke_all_user_refresh_tokens(db, user_id, now)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token reuse detected; all sessions revoked",
         )
 
     expires_at = stored_token.expires_at
@@ -93,29 +120,39 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str) -> Toke
             detail="Refresh token has expired",
         )
 
+    # Atomic conditional claim prevents concurrent double-rotation race (P1-6)
+    claim_result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.id == stored_token.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    if claim_result.rowcount != 1:
+        await revoke_all_user_refresh_tokens(db, user_id, now)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token already rotated",
+        )
+
     user_res = await db.execute(select(User).where(User.id == user_id))
     user = user_res.scalar_one_or_none()
     if user is None or not user.is_active:
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account not found or inactive",
         )
 
-    # Revoke old refresh token (strict rotation)
-    stored_token.revoked_at = now
-    await db.flush()
     return await issue_token_pair(db, user)
 
 
 async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str) -> None:
     token_digest = hash_token(raw_refresh_token)
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == token_digest)
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.token_hash == token_digest, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(timezone.utc))
     )
-    stored_token = result.scalar_one_or_none()
-    if stored_token is not None and stored_token.revoked_at is None:
-        stored_token.revoked_at = datetime.now(timezone.utc)
-        await db.commit()
+    await db.commit()
 
 
 async def create_user_account(
@@ -147,9 +184,10 @@ async def create_user_account(
                 detail="A student with this enrollment number already exists",
             )
 
+    pw_hash = await hash_password_async(payload.password)
     new_user = User(
         email=normalized_email,
-        password_hash=hash_password(payload.password),
+        password_hash=pw_hash,
         full_name=payload.full_name.strip(),
         role=payload.role,
         enrollment_no=payload.enrollment_no.strip() if payload.enrollment_no else None,

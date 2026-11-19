@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -8,17 +9,42 @@ import jwt
 
 from app.core.config import settings
 
+MAX_BCRYPT_PASSWORD_BYTES = 72
+# Precomputed dummy hash used to equalize timing when a login email does not exist
+_DUMMY_BCRYPT_HASH = bcrypt.hashpw(b"dummy-timing-equalization-password", bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def validate_password_byte_length(plain_password: str) -> None:
+    if len(plain_password.encode("utf-8")) > MAX_BCRYPT_PASSWORD_BYTES:
+        raise ValueError(f"Password must not exceed {MAX_BCRYPT_PASSWORD_BYTES} UTF-8 bytes")
+
 
 def hash_password(plain_password: str) -> str:
+    validate_password_byte_length(plain_password)
     salt = bcrypt.gensalt(rounds=12)
     return bcrypt.hashpw(plain_password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
+    pw_bytes = plain_password.encode("utf-8")
+    if len(pw_bytes) > MAX_BCRYPT_PASSWORD_BYTES:
+        return False
     try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+        return bcrypt.checkpw(pw_bytes, password_hash.encode("utf-8"))
     except ValueError:
         return False
+
+
+async def hash_password_async(plain_password: str) -> str:
+    return await asyncio.to_thread(hash_password, plain_password)
+
+
+async def verify_password_async(plain_password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(verify_password, plain_password, password_hash)
+
+
+async def dummy_verify_password_async(plain_password: str) -> None:
+    await asyncio.to_thread(verify_password, plain_password, _DUMMY_BCRYPT_HASH)
 
 
 def hash_token(token: str) -> str:

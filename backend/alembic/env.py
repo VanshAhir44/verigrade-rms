@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import settings
+from app.core.config import normalize_async_database_url, settings
 from app.db.base import Base
 import app.models  # noqa: F401 - ensures all models are registered on Base.metadata
 
@@ -15,10 +15,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Allow CLI `-x database_url=...` or environment variable DATABASE_URL
+# Allow CLI `-x database_url=...` or environment variable DATABASE_URL; normalize & escape % for ConfigParser
 x_args = context.get_x_argument(as_dictionary=True)
-database_url = x_args.get("database_url") or settings.DATABASE_URL
-config.set_main_option("sqlalchemy.url", database_url)
+raw_url = x_args.get("database_url") or settings.DATABASE_URL
+database_url = normalize_async_database_url(raw_url)
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

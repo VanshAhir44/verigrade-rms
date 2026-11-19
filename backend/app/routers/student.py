@@ -1,3 +1,5 @@
+import asyncio
+import re
 import uuid
 from datetime import timezone
 from decimal import Decimal
@@ -30,13 +32,10 @@ async def get_student_results(
     db: AsyncSession = Depends(get_db),
 ) -> StudentDashboardResponse:
     enrollments = (
-        await db.execute(
-            select(Enrollment).where(Enrollment.student_id == student.id)
-        )
+        await db.execute(select(Enrollment).where(Enrollment.student_id == student.id))
     ).scalars().all()
 
     semester_items: list[StudentSemesterResult] = []
-    latest_cgpa: Decimal | None = None
 
     for enr in enrollments:
         semester = (
@@ -92,7 +91,6 @@ async def get_student_results(
             ]
             subject_rows.sort(key=lambda r: r.subject_code)
             has_fail = any((r.grade or "F") == "F" for r in subject_rows)
-            latest_cgpa = Decimal(str(published.cgpa))
 
             semester_items.append(
                 StudentSemesterResult(
@@ -128,7 +126,11 @@ async def get_student_results(
                 )
             )
 
+    # P1-4 fix: sort semesters chronologically BEFORE selecting latest_cgpa
     semester_items.sort(key=lambda s: (s.academic_year, s.semester_number))
+    published_sorted = [s for s in semester_items if s.cgpa is not None]
+    latest_cgpa: Decimal | None = published_sorted[-1].cgpa if published_sorted else None
+
     return StudentDashboardResponse(
         student_id=student.id,
         full_name=student.full_name,
@@ -179,10 +181,14 @@ async def download_marksheet_pdf(
         .all()
     }
 
+    matched_pairs = [
+        (m, subjects_map[m.subject_id]) for m in marks if m.subject_id in subjects_map
+    ]
+    matched_pairs.sort(key=lambda pair: pair[1].code)
+
     lines = []
     has_fail = False
-    for m in sorted(marks, key=lambda mk: subjects_map[mk.subject_id].code):
-        sub = subjects_map[m.subject_id]
+    for m, sub in matched_pairs:
         max_total = Decimal(str(sub.max_internal)) + Decimal(str(sub.max_external))
         if (m.grade or "F") == "F":
             has_fail = True
@@ -213,28 +219,30 @@ async def download_marksheet_pdf(
         "%d %b %Y, %I:%M:%S %p IST"
     )
 
-    pdf_bytes = generate_marksheet_pdf(
-        MarksheetData(
-            result_id=str(published.id),
-            student_name=student.full_name,
-            enrollment_no=student.enrollment_no or "N/A",
-            department_name=department.name,
-            course_name=course.name,
-            semester_number=semester.number,
-            academic_year=semester.academic_year,
-            sgpa=f"{Decimal(str(published.sgpa)):.2f}",
-            cgpa=f"{Decimal(str(published.cgpa)):.2f}",
-            overall_status="FAIL" if has_fail else "PASS",
-            result_hash_sha256=published.result_hash_sha256,
-            blockchain_tx_hash=published.blockchain_tx_hash or "N/A",
-            block_number=published.block_number,
-            published_at_iso=published_ist_str,
-            verify_url=verify_url,
-            subjects=lines,
-        )
+    marksheet_data = MarksheetData(
+        result_id=str(published.id),
+        student_name=student.full_name,
+        enrollment_no=student.enrollment_no or "N/A",
+        department_name=department.name,
+        course_name=course.name,
+        semester_number=semester.number,
+        academic_year=semester.academic_year,
+        sgpa=f"{Decimal(str(published.sgpa)):.2f}",
+        cgpa=f"{Decimal(str(published.cgpa)):.2f}",
+        overall_status="FAIL" if has_fail else "PASS",
+        result_hash_sha256=published.result_hash_sha256,
+        blockchain_tx_hash=published.blockchain_tx_hash or "N/A",
+        block_number=published.block_number,
+        published_at_iso=published_ist_str,
+        verify_url=verify_url,
+        subjects=lines,
     )
 
-    filename = f"marksheet_{student.enrollment_no or student.id}_sem{semester.number}.pdf"
+    # Offload CPU-bound ReportLab + QR generation from the async event loop (P2-12)
+    pdf_bytes = await asyncio.to_thread(generate_marksheet_pdf, marksheet_data)
+
+    safe_enr = re.sub(r"[^A-Za-z0-9._-]", "_", student.enrollment_no or str(student.id))
+    filename = f"marksheet_{safe_enr}_sem{semester.number}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
