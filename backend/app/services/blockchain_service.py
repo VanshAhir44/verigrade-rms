@@ -114,7 +114,7 @@ class BlockchainService:
 
         if self.deployer_key:
             account = self.w3.eth.account.from_key(self.deployer_key)
-            nonce = self.w3.eth.get_transaction_count(account.address)
+            nonce = self.w3.eth.get_transaction_count(account.address, "pending")
             tx = fn_call.build_transaction(
                 {
                     "from": account.address,
@@ -129,7 +129,7 @@ class BlockchainService:
             from_addr = self.sender_address or self.w3.eth.accounts[0]
             tx_hash_bytes = fn_call.transact({"from": from_addr})
 
-        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash_bytes)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash_bytes, timeout=120)
         if receipt["status"] != 1:
             raise RuntimeError(f"On-chain transaction reverted: {tx_hash_bytes.hex()}")
 

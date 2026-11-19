@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import uuid
@@ -489,8 +490,16 @@ async def publish_semester_results(
         )
         result_hash = compute_result_hash(canonical_payload)
 
-        # Anchor immutable SHA-256 hash on-chain
-        receipt = blockchain.store_result_hash(str(result_uuid), result_hash)
+        # Anchor immutable SHA-256 hash on-chain without blocking FastAPI's event loop
+        try:
+            receipt = await asyncio.to_thread(
+                blockchain.store_result_hash, str(result_uuid), result_hash
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Blockchain transaction failed for {student.enrollment_no or student.email}: {exc}",
+            )
 
         # Lock all marks as published
         now = utcnow()
@@ -528,6 +537,8 @@ async def publish_semester_results(
                 },
             )
         )
+        await db.commit()
+        await db.refresh(published)
         published_records.append(published)
         ws_notifications.append(
             (
@@ -548,10 +559,6 @@ async def publish_semester_results(
                 },
             )
         )
-
-    await db.commit()
-    for rec in published_records:
-        await db.refresh(rec)
 
     # Real-time WebSocket push to connected students (zero page reload)
     for student_id_str, payload_event in ws_notifications:
