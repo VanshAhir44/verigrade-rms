@@ -45,7 +45,7 @@ export function clearAuthSession(): void {
   }
 }
 
-async function tryRefreshSession(): Promise<string | null> {
+export async function tryRefreshSession(): Promise<string | null> {
   if (refreshInFlight) {
     return refreshInFlight;
   }

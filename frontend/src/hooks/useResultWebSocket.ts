@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getStoredAccessToken, WS_BASE_URL } from "@/lib/api";
+import { getStoredAccessToken, tryRefreshSession, WS_BASE_URL } from "@/lib/api";
 import type { LiveWsEvent } from "@/types/api";
 
 export type WsStatus = "connecting" | "connected" | "disconnected";
@@ -59,12 +59,18 @@ export function useResultWebSocket(
         }
       };
 
-      ws.onclose = (ev) => {
+      ws.onclose = async (ev) => {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         if (unmounted) return;
         setStatus("disconnected");
-        // Stop tight retry loop if server rejected token with 1008 until token refreshes
+        // If server rejected an expired access token (1008), refresh JWT once before reconnecting
         if (ev.code === 1008) {
+          const refreshed = await tryRefreshSession();
+          if (refreshed && !unmounted) {
+            retryDelayMs = 3000;
+            reconnectTimer = setTimeout(connect, 500);
+            return;
+          }
           retryDelayMs = Math.min(retryDelayMs * 2, 30000);
         }
         reconnectTimer = setTimeout(connect, retryDelayMs);
