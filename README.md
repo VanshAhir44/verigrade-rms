@@ -4,6 +4,27 @@
 Production-grade academic result management platform built with **FastAPI**, **PostgreSQL (SQLAlchemy 2.0 async + Alembic)**, **Solidity / Hardhat (`ResultRegistry.sol`) + `web3.py`**, **ReportLab + QR Code**, and **Next.js (App Router + Tailwind CSS + Framer Motion + Recharts)**.
 
 ---
+## System Walkthrough & Screenshots
+
+### 1. Authentication & Public Verifier Portal
+<img width="2816" height="1100" alt="Login Page" src="https://github.com/user-attachments/assets/f152c109-3b1b-41ef-85d9-a003f3be5215" />
+
+### 2. Faculty Marks Workbench
+<img width="2816" height="990" alt="Faculty Workbench" src="https://github.com/user-attachments/assets/60519176-1a63-40a5-99db-7b744076d432" />
+
+### 3. Admin Controller — One-Click On-Chain Publish
+<img width="2816" height="1302" alt="Admin Live Publish" src="https://github.com/user-attachments/assets/9a3e1361-980e-4fae-9f90-4038cef58b6c" />
+
+### 4. Student Live Result Dashboard (Dark & Light Themes)
+<img width="2816" height="2158" alt="Student Dashboard Dark" src="https://github.com/user-attachments/assets/b5094f21-1df0-4ada-b93a-6e92cb0ecc3d" />
+<img width="2816" height="2158" alt="Student Dashboard Light" src="https://github.com/user-attachments/assets/d67424f1-a8a4-4ebc-aa8a-9ad7853d8d2e" />
+
+### 5. Public Cryptographic Verification Proof
+<img width="2816" height="1960" alt="Public Verify Result" src="https://github.com/user-attachments/assets/122347a8-6303-44b3-a8ab-a4c324bfc137" />
+
+---
+
+
 
 ## Repository Structure
 
