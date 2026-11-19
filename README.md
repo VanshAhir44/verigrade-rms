@@ -1,3 +1,4 @@
+
 # Real-Time Verified Student Result Management System (VeriGrade RMS)
 
 Production-grade academic result management platform built with **FastAPI**, **PostgreSQL (SQLAlchemy 2.0 async + Alembic)**, **Solidity / Hardhat (`ResultRegistry.sol`) + `web3.py`**, **ReportLab + QR Code**, and **Next.js (App Router + Tailwind CSS + Framer Motion + Recharts)**.
