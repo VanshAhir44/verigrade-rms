@@ -71,19 +71,20 @@ class BlockchainService:
         if w3 is not None:
             self.w3 = w3
         else:
-            resolved_rpc = rpc_url or settings.BLOCKCHAIN_RPC_URL
+            resolved_rpc = (rpc_url or settings.BLOCKCHAIN_RPC_URL).strip()
             if not resolved_rpc:
                 raise RuntimeError("BLOCKCHAIN_RPC_URL is not configured.")
             self.w3 = Web3(Web3.HTTPProvider(resolved_rpc))
 
-        resolved_addr = contract_address or settings.RESULT_REGISTRY_CONTRACT_ADDRESS
+        resolved_addr = (contract_address or settings.RESULT_REGISTRY_CONTRACT_ADDRESS).strip()
         if not resolved_addr:
             raise RuntimeError("RESULT_REGISTRY_CONTRACT_ADDRESS is not configured.")
 
         self.contract_address = Web3.to_checksum_address(resolved_addr)
-        self.deployer_key = (
+        raw_key = (
             deployer_key if deployer_key is not None else os.getenv("BLOCKCHAIN_DEPLOYER_KEY", "")
         )
+        self.deployer_key = raw_key.strip()
         self.sender_address = (
             Web3.to_checksum_address(sender_address) if sender_address else None
         )
