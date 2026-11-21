@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: rms-backend-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SIGNING_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PUBLIC_VERIFY_BASE_URL
+        sync: false
+      - key: BLOCKCHAIN_RPC_URL
+        sync: false
+      - key: BLOCKCHAIN_CHAIN_ID
+        value: "11155111"
+      - key: BLOCKCHAIN_DEPLOYER_KEY
+        sync: false
+      - key: RESULT_REGISTRY_CONTRACT_ADDRESS
+        sync: false
