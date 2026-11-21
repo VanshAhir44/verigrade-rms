@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ShieldCheck, Sun, Moon, LogOut, Radio } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/ThemeProvider";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import type { WsStatus } from "@/hooks/useResultWebSocket";
 
 interface NavbarProps {
@@ -14,9 +16,26 @@ interface NavbarProps {
 export function Navbar({ wsStatus }: NavbarProps) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleLogout = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/80">
+    <>
+      <LoadingOverlay
+        open={signingOut}
+        variant="auth"
+        title="Signing you out..."
+        subtitle="Closing your session securely"
+      />
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
         <Link href={user ? `/${user.role}` : "/"} className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
@@ -90,8 +109,9 @@ export function Navbar({ wsStatus }: NavbarProps) {
               </div>
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => logout()}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-rose-50 hover:text-rose-700 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-rose-950/50 dark:hover:text-rose-300"
+                disabled={signingOut}
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-rose-950/50 dark:hover:text-rose-300"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Sign Out
@@ -101,5 +121,6 @@ export function Navbar({ wsStatus }: NavbarProps) {
         </div>
       </div>
     </header>
+    </>
   );
 }

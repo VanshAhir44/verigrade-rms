@@ -6,20 +6,29 @@ import { motion } from "framer-motion";
 import { ShieldCheck, Search } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 
 export default function VerifyIndexPage() {
   const router = useRouter();
   const [resultId, setResultId] = useState("");
+  const [navigating, setNavigating] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (resultId.trim()) {
+      setNavigating(true);
       router.push(`/verify/${encodeURIComponent(resultId.trim())}`);
     }
   };
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={navigating}
+        variant="blockchain"
+        title="Opening On-Chain Verifier..."
+        subtitle="Querying immutable ResultRegistry proof for this Result UUID"
+      />
       <Navbar />
       <PageTransition>
         <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6">

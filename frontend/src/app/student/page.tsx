@@ -19,6 +19,7 @@ import {
   StaggerGrid,
   ToastBanner,
 } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { PerformanceCharts } from "@/components/PerformanceCharts";
 import { useAuth } from "@/lib/auth-context";
@@ -96,28 +97,47 @@ export default function StudentDashboardPage() {
     }
   };
 
-  if (loading || !user || user.role !== "student") return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <LoadingOverlay
+          open
+          variant="auth"
+          title="Verifying Student Session..."
+          subtitle="Opening your academic results portal"
+        />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "student") return null;
 
   if (!dashboard) {
     return (
       <div className="min-h-screen">
+        <LoadingOverlay
+          open={!loadError}
+          variant="default"
+          title="Loading Your Results..."
+          subtitle="Fetching published transcripts, GPA trends, and on-chain proofs"
+        />
         <Navbar wsStatus={wsStatus} />
         <ToastBanner toast={toast} onClose={() => setToast(null)} />
-        <main className="mx-auto max-w-2xl px-4 py-16 text-center">
-          <div className="glass-card space-y-4 p-8">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              {loadError ? `Could not load results: ${loadError}` : "Loading your academic dashboard..."}
-            </p>
-            {loadError && (
+        {loadError && (
+          <main className="mx-auto max-w-2xl px-4 py-16 text-center">
+            <div className="glass-card space-y-4 p-8">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Could not load results: {loadError}
+              </p>
               <button
                 onClick={loadDashboard}
                 className="rounded-xl bg-brand-600 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-700"
               >
                 Retry
               </button>
-            )}
-          </div>
-        </main>
+            </div>
+          </main>
+        )}
       </div>
     );
   }
@@ -127,6 +147,12 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={Boolean(downloadingId)}
+        variant="pdf"
+        title="Generating QR-Verified PDF..."
+        subtitle="Building your official marksheet with embedded blockchain verification QR"
+      />
       <Navbar wsStatus={wsStatus} />
       <ToastBanner toast={toast} onClose={() => setToast(null)} />
 

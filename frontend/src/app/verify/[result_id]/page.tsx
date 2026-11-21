@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { ShieldCheck, ShieldAlert, Hash, Blocks, Clock, ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { apiRequest, ApiError } from "@/lib/api";
 import { formatIST } from "@/lib/date";
@@ -35,6 +36,12 @@ export default function VerifyResultPage() {
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={loading}
+        variant="blockchain"
+        title="Verifying On-Chain Proof..."
+        subtitle="Recomputing SHA-256 digest and checking the immutable ResultRegistry smart contract"
+      />
       <Navbar />
       <PageTransition>
         <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">

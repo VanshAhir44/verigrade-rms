@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Save, Send, Lock, AlertCircle } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition, ToastBanner } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, ApiError } from "@/lib/api";
 import { useResultWebSocket } from "@/hooks/useResultWebSocket";
@@ -35,6 +36,7 @@ export default function FacultyDashboardPage() {
   const selectedIdRef = useRef<string>("");
   const [drafts, setDrafts] = useState<Record<string, DraftScore>>({});
   const [isDirty, setIsDirty] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error" | "live"; message: string } | null>(null);
@@ -63,6 +65,8 @@ export default function FacultyDashboardPage() {
       }
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to load subjects");
+    } finally {
+      setInitialLoading(false);
     }
   }, [showToast]);
 
@@ -167,10 +171,41 @@ export default function FacultyDashboardPage() {
     }
   };
 
-  if (loading || !user || user.role !== "faculty") return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <LoadingOverlay
+          open
+          variant="auth"
+          title="Verifying Faculty Session..."
+          subtitle="Opening your marks entry workbench"
+        />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "faculty") return null;
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={initialLoading || saving || submitting}
+        variant={submitting ? "auth" : "default"}
+        title={
+          submitting
+            ? "Submitting & Locking Marks..."
+            : saving
+            ? "Saving Draft Marks..."
+            : "Loading Faculty Workbench..."
+        }
+        subtitle={
+          submitting
+            ? "Finalizing scores and notifying the Controller of Examinations"
+            : saving
+            ? "Validating bounds and saving your draft mark entries"
+            : "Fetching assigned subjects and student rosters"
+        }
+      />
       <Navbar wsStatus={wsStatus} />
       <ToastBanner toast={toast} onClose={() => setToast(null)} />
 

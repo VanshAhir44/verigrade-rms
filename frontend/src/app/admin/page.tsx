@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition, ToastBanner } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, ApiError } from "@/lib/api";
 import { formatIST } from "@/lib/date";
@@ -49,6 +50,8 @@ export default function AdminDashboardPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<{ title: string; subtitle: string } | null>(null);
   const [lastPublish, setLastPublish] = useState<SemesterPublishResponse | null>(null);
   const [csvResult, setCsvResult] = useState<BulkCsvImportResponse | null>(null);
 
@@ -67,7 +70,13 @@ export default function AdminDashboardPage() {
     setTimeout(() => setToast(null), 5000);
   }, []);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (showSpinner = false) => {
+    if (showSpinner) {
+      setBusyAction({
+        title: "Refreshing Portal Data...",
+        subtitle: "Syncing latest departments, accounts, and audit logs",
+      });
+    }
     try {
       const [d, c, s, sub, u, a] = await Promise.all([
         apiRequest<Department[]>("/admin/departments"),
@@ -85,6 +94,9 @@ export default function AdminDashboardPage() {
       setAuditLogs(a);
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to load admin data");
+    } finally {
+      setInitialLoading(false);
+      if (showSpinner) setBusyAction(null);
     }
   }, [showToast]);
 
@@ -143,6 +155,10 @@ export default function AdminDashboardPage() {
 
   const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBusyAction({
+      title: "Creating Department...",
+      subtitle: "Saving new academic department to the database",
+    });
     try {
       await apiRequest<Department>("/admin/departments", {
         method: "POST",
@@ -153,11 +169,17 @@ export default function AdminDashboardPage() {
       await loadAll();
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to create department");
+    } finally {
+      setBusyAction(null);
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBusyAction({
+      title: "Creating Account...",
+      subtitle: "Securing credentials and recording audit log entry",
+    });
     try {
       await apiRequest<User>("/auth/users", {
         method: "POST",
@@ -171,6 +193,8 @@ export default function AdminDashboardPage() {
       await loadAll();
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "Failed to create account");
+    } finally {
+      setBusyAction(null);
     }
   };
 
@@ -179,6 +203,10 @@ export default function AdminDashboardPage() {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
+    setBusyAction({
+      title: "Importing Accounts from CSV...",
+      subtitle: "Validating rows and provisioning portal users",
+    });
     try {
       const res = await apiRequest<BulkCsvImportResponse>("/admin/users/bulk-csv", {
         method: "POST",
@@ -189,6 +217,8 @@ export default function AdminDashboardPage() {
       await loadAll();
     } catch (err) {
       showToast("error", err instanceof ApiError ? err.message : "CSV import failed");
+    } finally {
+      setBusyAction(null);
     }
     e.target.value = "";
   };
@@ -196,10 +226,37 @@ export default function AdminDashboardPage() {
   const filteredUsers =
     roleFilter === "all" ? users : users.filter((u) => u.role === roleFilter);
 
-  if (loading || !user || user.role !== "admin") return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <LoadingOverlay
+          open
+          variant="auth"
+          title="Verifying Admin Session..."
+          subtitle="Loading Controller of Examinations portal"
+        />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "admin") return null;
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={Boolean(publishingId) || initialLoading || Boolean(busyAction)}
+        variant={publishingId ? "blockchain" : "default"}
+        title={
+          publishingId
+            ? "Publishing Results On-Chain..."
+            : busyAction?.title ?? "Loading Examination Portal..."
+        }
+        subtitle={
+          publishingId
+            ? "Computing SHA-256 digests, anchoring on Ethereum Sepolia, and broadcasting live"
+            : busyAction?.subtitle ?? "Fetching departments, courses, semesters, and audit logs"
+        }
+      />
       <Navbar wsStatus={wsStatus} />
       <ToastBanner toast={toast} onClose={() => setToast(null)} />
 
@@ -213,7 +270,7 @@ export default function AdminDashboardPage() {
               </p>
             </div>
             <button
-              onClick={loadAll}
+              onClick={() => loadAll(true)}
               className="inline-flex items-center gap-1.5 self-start rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
             >
               <RefreshCw className="h-3.5 w-3.5" />

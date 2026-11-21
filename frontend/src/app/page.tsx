@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Lock, Mail, ShieldCheck, Search, ArrowRight } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition } from "@/components/MotionPrimitives";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError } from "@/lib/api";
 
@@ -17,6 +18,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [verifyId, setVerifyId] = useState("");
+  const [verifyingNav, setVerifyingNav] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -33,7 +35,6 @@ export default function HomePage() {
       router.push(`/${loggedIn.role}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Authentication failed");
-    } finally {
       setSubmitting(false);
     }
   };
@@ -42,12 +43,31 @@ export default function HomePage() {
     e.preventDefault();
     const cleaned = verifyId.trim();
     if (cleaned) {
+      setVerifyingNav(true);
       router.push(`/verify/${encodeURIComponent(cleaned)}`);
     }
   };
 
   return (
     <div className="min-h-screen">
+      <LoadingOverlay
+        open={submitting || loading || verifyingNav}
+        variant={verifyingNav ? "blockchain" : "auth"}
+        title={
+          verifyingNav
+            ? "Opening On-Chain Verifier..."
+            : submitting
+            ? "Signing you in..."
+            : "Checking your session..."
+        }
+        subtitle={
+          verifyingNav
+            ? "Preparing cryptographic SHA-256 verification lookup"
+            : submitting
+            ? "Authenticating your university credentials and preparing your portal"
+            : "Restoring your authenticated portal session"
+        }
+      />
       <Navbar />
       <PageTransition>
         <main className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2">
