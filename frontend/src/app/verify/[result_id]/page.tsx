@@ -100,8 +100,8 @@ export default function VerifyResultPage() {
                       )}
                     </motion.div>
                     <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider opacity-75">
-                        Cryptographic Integrity Status
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                        Integrity verification
                       </span>
                       <h1
                         className={`text-2xl font-bold ${
@@ -114,7 +114,7 @@ export default function VerifyResultPage() {
                       </h1>
                     </div>
                   </div>
-                  <div className="flex gap-6">
+                  <div className="flex gap-6 tabular-nums">
                     <div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">SGPA</p>
                       <AnimatedCounter

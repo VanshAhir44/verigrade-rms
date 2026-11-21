@@ -1,0 +1,19 @@
+---
+description: VeriGrade RMS engineering, anti-slop UI, and dead-code hygiene standards
+globs: frontend/src/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# VeriGrade RMS Frontend Standards
+
+## Dead-Code Hygiene (Knip)
+- Do not export internal-only types, constants, or helpers. Only export symbols imported by other modules.
+- Run `npx knip` (configured in `frontend/knip.json`) and `npm run typecheck` before committing.
+
+## Anti-Slop Visual & Copy Discipline
+- **Single Accent Palette**: Use `brand` (indigo) as the single primary accent, `emerald` only for verified/published states, `amber` for in-review/warnings, `rose` for errors, and grayscale (`slate`) for all surfaces and hierarchy.
+- **No Decorative Clichés**: Avoid multi-color gradient washes, radial glow blobs, `Sparkles` icons, ALL-CAPS tracked-out eyebrow labels, and trailing `→` arrows on buttons.
+- **Restrained Motion**: Reserve motion for state feedback (loading overlays, live result arrival, modal/toast transitions). Avoid fade-and-slide-up animations on static cards. Always respect `prefers-reduced-motion`.
+- **Plain User Copy**: Write UI copy from the student/faculty/admin perspective, never internal implementation jargon (e.g., avoid "JWT RBAC" or "WebSockets" in login/portal copy).
+- **Numeric Precision**: Apply `tabular-nums` to all GPA, marks, credits, and timestamp displays.
+- **Accessibility**: Maintain WCAG AA contrast in both light and dark modes, visible `:focus-visible` rings, and semantic `role`/`aria-label` attributes.

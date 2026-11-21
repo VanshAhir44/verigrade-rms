@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Lock, Mail, ShieldCheck, Search, ArrowRight } from "lucide-react";
+import { Lock, Mail, ShieldCheck, Search } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { PageTransition } from "@/components/MotionPrimitives";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
@@ -72,22 +72,22 @@ export default function HomePage() {
       <PageTransition>
         <main className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2">
           <div className="space-y-6">
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 dark:border-brand-800 dark:bg-brand-950/70 dark:text-brand-300">
               <ShieldCheck className="h-3.5 w-3.5" />
-              Blockchain-Anchored Academic Transcripts
+              Blockchain-verified academic transcripts
             </span>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Real-Time Verified Student Results
+            <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-5xl">
+              Official student results, verified in seconds.
             </h1>
-            <p className="text-base leading-relaxed text-slate-600 dark:text-slate-300">
-              Enter marks with instant validation, publish semester results live over WebSockets,
-              anchor SHA-256 digests on-chain via Solidity, and let employers or universities
-              verify PDF marksheets publicly in one click.
+            <p className="max-w-xl text-base leading-relaxed text-slate-600 dark:text-slate-300">
+              Publish semester marksheets in real time. Every transcript carries a tamper-evident
+              on-chain record and QR code that universities and employers can check without
+              signing in.
             </p>
 
             <form onSubmit={handleVerifyLookup} className="glass-card p-5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Public Verifier (No Login Required)
+              <p className="mb-2.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+                Public transcript verifier — no sign-in required
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative flex-1">
@@ -96,26 +96,25 @@ export default function HomePage() {
                     type="text"
                     value={verifyId}
                     onChange={(e) => setVerifyId(e.target.value)}
-                    placeholder="Paste Result UUID from PDF or QR..."
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-900"
+                    placeholder="Paste Result ID from PDF or QR code"
+                    className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-950"
                   />
                 </div>
                 <motion.button
-                  whileTap={{ scale: 0.97 }}
+                  whileTap={{ scale: 0.98 }}
                   type="submit"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                  className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                 >
-                  Verify On-Chain
-                  <ArrowRight className="h-4 w-4" />
+                  Verify result
                 </motion.button>
               </div>
             </form>
           </div>
 
           <div className="glass-card p-7 sm:p-8">
-            <h2 className="text-xl font-semibold">Sign in to Portal</h2>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Sign in to VeriGrade</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Admin, Faculty, and Student accounts authenticate with JWT RBAC.
+              Use your university email for Student, Faculty, or Examination Controller access.
             </p>
 
             <form onSubmit={handleLogin} className="mt-6 space-y-4">

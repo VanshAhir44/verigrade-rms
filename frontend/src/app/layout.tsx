@@ -1,15 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/lib/auth-context";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "VeriGrade — Real-Time Blockchain-Verified Result Management",
+  title: "VeriGrade RMS — Verified University Results",
   description:
-    "Enterprise academic result management with real-time WebSocket publishing, QR-verified PDF transcripts, and on-chain SHA-256 verification.",
+    "Publish and verify official university semester transcripts with real-time delivery, QR-coded PDF marksheets, and on-chain integrity proofs.",
 };
 
 export default function RootLayout({
@@ -18,7 +28,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${plusJakarta.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="min-h-screen font-sans">
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>

@@ -1,5 +1,5 @@
 export type UserRole = "admin" | "faculty" | "student";
-export type MarkStatus = "draft" | "under_review" | "published";
+type MarkStatus = "draft" | "under_review" | "published";
 
 export interface User {
   id: string;
@@ -57,7 +57,7 @@ export interface Subject {
   created_at: string;
 }
 
-export interface FacultyStudentMarkRow {
+interface FacultyStudentMarkRow {
   student_id: string;
   student_name: string;
   enrollment_no: string | null;
@@ -76,7 +76,7 @@ export interface FacultySubjectRoster {
   students: FacultyStudentMarkRow[];
 }
 
-export interface BulkCsvError {
+interface BulkCsvError {
   row: number;
   email: string | null;
   error: string;
@@ -98,7 +98,7 @@ export interface AuditLog {
   timestamp: string;
 }
 
-export interface PublishedResult {
+interface PublishedResult {
   id: string;
   student_id: string;
   semester_id: string;
@@ -117,7 +117,7 @@ export interface SemesterPublishResponse {
   results: PublishedResult[];
 }
 
-export interface StudentSubjectResult {
+interface StudentSubjectResult {
   subject_code: string;
   subject_name: string;
   credits: string;

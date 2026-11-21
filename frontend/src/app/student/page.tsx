@@ -7,7 +7,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Download,
   ShieldCheck,
-  Sparkles,
   CheckCircle2,
   Clock,
   FileText,
@@ -167,28 +166,30 @@ export default function StudentDashboardPage() {
             </div>
           </div>
 
-          {/* Celebratory Live Result Reveal Banner */}
+          {/* Live Result Publication Banner */}
           <AnimatePresence>
             {liveRevealBanner && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.94, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 p-5 shadow-sm dark:border-emerald-800 dark:from-emerald-950/70 dark:to-indigo-950/70"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10"
               >
                 <div className="flex items-center gap-3">
-                  <Sparkles className="h-6 w-6 text-emerald-600" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                      Live Blockchain Publication Received
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      New result published on-chain
                     </p>
-                    <p className="text-sm font-bold">{liveRevealBanner}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {liveRevealBanner}
+                    </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setLiveRevealBanner(null)}
-                  className="text-xs font-medium underline opacity-75 hover:opacity-100"
+                  className="text-xs font-medium text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                 >
                   Dismiss
                 </button>
@@ -196,11 +197,11 @@ export default function StudentDashboardPage() {
             )}
           </AnimatePresence>
 
-          {/* Animated KPI Cards */}
+          {/* Academic KPI Summary */}
           <StaggerGrid className="grid gap-4 sm:grid-cols-3">
             <FadeInCard className="p-5">
-              <p className="text-xs font-medium text-slate-500">Cumulative CGPA</p>
-              <div className="mt-2 text-3xl font-bold text-brand-600 dark:text-brand-400">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Cumulative CGPA</p>
+              <div className="mt-2 text-3xl font-bold tabular-nums text-brand-600 dark:text-brand-400">
                 {dashboard.latest_cgpa ? (
                   <AnimatedCounter value={Number(dashboard.latest_cgpa)} />
                 ) : (
@@ -209,14 +210,14 @@ export default function StudentDashboardPage() {
               </div>
             </FadeInCard>
             <FadeInCard className="p-5">
-              <p className="text-xs font-medium text-slate-500">Latest Semester SGPA</p>
-              <div className="mt-2 text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Latest semester SGPA</p>
+              <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
                 {latestSem?.sgpa ? <AnimatedCounter value={Number(latestSem.sgpa)} /> : "—"}
               </div>
             </FadeInCard>
             <FadeInCard className="p-5">
-              <p className="text-xs font-medium text-slate-500">Published Semesters</p>
-              <div className="mt-2 text-3xl font-bold">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Published semesters</p>
+              <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
                 <AnimatedCounter value={publishedSemesters.length} decimals={0} />
               </div>
             </FadeInCard>
