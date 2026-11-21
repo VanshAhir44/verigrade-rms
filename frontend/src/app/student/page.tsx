@@ -245,28 +245,57 @@ export default function StudentDashboardPage() {
                       <p className="text-xs text-slate-500">Academic Year {sem.academic_year}</p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {(["Draft", "Under Review", "Published"] as const).map((label, idx) => (
-                        <span
-                          key={label}
-                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                            idx <= stepIdx
-                              ? idx === 2
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                : "bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300"
-                              : "bg-slate-100 text-slate-400 dark:bg-slate-800"
-                          }`}
-                        >
-                          {idx === 2 ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : idx === 1 ? (
-                            <Clock className="h-3.5 w-3.5" />
-                          ) : (
-                            <FileText className="h-3.5 w-3.5" />
-                          )}
-                          {label}
-                        </span>
-                      ))}
+                    <div
+                      aria-label="Result publication status"
+                      className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1.5 dark:border-slate-800 dark:bg-slate-950/60"
+                    >
+                      {(["Draft", "Under Review", "Published"] as const).map((label, idx) => {
+                        const isCompleted = idx < stepIdx;
+                        const isCurrent = idx === stepIdx;
+
+                        const pillStyle = isCurrent
+                          ? idx === 2
+                            ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : idx === 1
+                            ? "border border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                            : "border border-brand-500/30 bg-brand-500/15 text-brand-700 dark:text-brand-300"
+                          : isCompleted
+                          ? "text-slate-600 dark:text-slate-400"
+                          : "text-slate-400 dark:text-slate-600";
+
+                        return (
+                          <React.Fragment key={label}>
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${pillStyle}`}
+                            >
+                              {isCompleted || (isCurrent && idx === 2) ? (
+                                <CheckCircle2
+                                  className={`h-3.5 w-3.5 ${
+                                    isCurrent
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-emerald-600/70 dark:text-emerald-500/70"
+                                  }`}
+                                />
+                              ) : idx === 1 ? (
+                                <Clock className="h-3.5 w-3.5" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5" />
+                              )}
+                              {label}
+                            </span>
+                            {idx < 2 && (
+                              <span
+                                aria-hidden="true"
+                                className={`h-px w-3.5 ${
+                                  idx < stepIdx
+                                    ? "bg-emerald-500/40"
+                                    : "bg-slate-300 dark:bg-slate-700"
+                                }`}
+                              />
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   </div>
 
