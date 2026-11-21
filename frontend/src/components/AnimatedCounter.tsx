@@ -1,8 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { animate } from "framer-motion";
-
 interface AnimatedCounterProps {
   value: number;
   decimals?: number;
@@ -10,26 +7,21 @@ interface AnimatedCounterProps {
   className?: string;
 }
 
+/**
+ * Renders an exact authoritative metric immediately without counting up from 0,
+ * preventing transient misleading intermediate values (e.g. 0.58 instead of 8.14).
+ */
 export function AnimatedCounter({
   value,
   decimals = 2,
   suffix = "",
   className = "",
 }: AnimatedCounterProps) {
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    const controls = animate(0, value, {
-      duration: 0.9,
-      ease: "easeOut",
-      onUpdate: (latest) => setDisplay(latest),
-    });
-    return () => controls.stop();
-  }, [value]);
+  const safeValue = Number.isFinite(value) ? value : 0;
 
   return (
-    <span className={className}>
-      {display.toFixed(decimals)}
+    <span className={`tabular-nums ${className}`.trim()}>
+      {safeValue.toFixed(decimals)}
       {suffix}
     </span>
   );
